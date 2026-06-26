@@ -34,3 +34,11 @@ tasks.add(
     ],
   },
 )
+
+tasks.add(
+  task_name="fix-bash",
+  task_config={
+    "help": "Windows-only: configure this workspace so all VS Code terminals prefer Git Bash without changing global PATH",
+    "cmd": f'powershell -NoProfile -ExecutionPolicy Bypass -File "{_script_path("fix-git-bash-workspace.ps1")}"',
+  },
+)

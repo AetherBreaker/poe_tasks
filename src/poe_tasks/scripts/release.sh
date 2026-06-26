@@ -25,11 +25,23 @@ PUSHED=false
 PUBLISHED_PYPI=false
 RELEASED_GITHUB=false
 NEW_VERSION=""
+SNAPSHOT_DIR=""
+PYPROJECT_SNAPSHOT=""
+UVLOCK_SNAPSHOT=""
+UVLOCK_WAS_PRESENT=false
+DIST_SNAPSHOT_DIR=""
 
 cleanup() {
   local exit_code=$?
-  [ $exit_code -eq 0 ] && return 0
   set +eu
+
+  if [ $exit_code -eq 0 ]; then
+    if [ -n "${SNAPSHOT_DIR:-}" ] && [ -d "${SNAPSHOT_DIR}" ]; then
+      rm -rf "${SNAPSHOT_DIR}" 2>/dev/null || true
+    fi
+    return 0
+  fi
+
   echo ""
   echo "ERROR: Release failed (exit code: ${exit_code}). Rolling back changes..."
 
@@ -68,9 +80,16 @@ cleanup() {
       || echo "     WARNING: Could not reset local commit. Run manually: git reset HEAD~1"
   fi
 
-  # 6. Restore pyproject.toml and uv.lock to their pre-bump state
-  if $VERSION_BUMPED; then
-    git checkout -- pyproject.toml uv.lock 2>/dev/null || true
+  # 6. Restore pyproject.toml and uv.lock to their exact pre-run contents.
+  if [ -n "${PYPROJECT_SNAPSHOT:-}" ] && [ -f "${PYPROJECT_SNAPSHOT}" ]; then
+    cp "${PYPROJECT_SNAPSHOT}" pyproject.toml 2>/dev/null || true
+  fi
+  if $UVLOCK_WAS_PRESENT; then
+    if [ -n "${UVLOCK_SNAPSHOT:-}" ] && [ -f "${UVLOCK_SNAPSHOT}" ]; then
+      cp "${UVLOCK_SNAPSHOT}" uv.lock 2>/dev/null || true
+    fi
+  else
+    rm -f uv.lock 2>/dev/null || true
   fi
 
   # 7. Force-push the rolled-back state to remote (local HEAD is now the pre-bump commit)
@@ -81,11 +100,32 @@ cleanup() {
   fi
 
   rm -f dist/*.whl dist/*.tar.gz 2>/dev/null || true
+  if [ -n "${DIST_SNAPSHOT_DIR:-}" ] && [ -d "${DIST_SNAPSHOT_DIR}" ]; then
+    cp "${DIST_SNAPSHOT_DIR}"/* dist/ 2>/dev/null || true
+  fi
+  if [ -n "${SNAPSHOT_DIR:-}" ] && [ -d "${SNAPSHOT_DIR}" ]; then
+    rm -rf "${SNAPSHOT_DIR}" 2>/dev/null || true
+  fi
   echo ""
   echo "Rollback complete."
 }
 
 trap cleanup EXIT
+
+SNAPSHOT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t release-snapshot)
+PYPROJECT_SNAPSHOT="${SNAPSHOT_DIR}/pyproject.toml"
+UVLOCK_SNAPSHOT="${SNAPSHOT_DIR}/uv.lock"
+DIST_SNAPSHOT_DIR="${SNAPSHOT_DIR}/dist"
+cp pyproject.toml "${PYPROJECT_SNAPSHOT}"
+if [ -f uv.lock ]; then
+  UVLOCK_WAS_PRESENT=true
+  cp uv.lock "${UVLOCK_SNAPSHOT}"
+fi
+mkdir -p "${DIST_SNAPSHOT_DIR}" dist
+for artifact in dist/*.whl dist/*.tar.gz; do
+  [ -f "${artifact}" ] || continue
+  cp "${artifact}" "${DIST_SNAPSHOT_DIR}/"
+done
 
 UV_VERSION_OUTPUT=$(uv version --bump "${bump_type}")
 PACKAGE_NAME=$(echo "${UV_VERSION_OUTPUT}" | awk '{print $1}' | tr '_' '-')
