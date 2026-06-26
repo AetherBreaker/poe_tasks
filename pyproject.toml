@@ -1,0 +1,48 @@
+[project]
+  name            = "poe-tasks"
+  version         = "0.1.0"
+  description     = "Shared poe tasks for SFT projects"
+  readme          = "README.md"
+  requires-python = ">=3.14"
+  dependencies    = [
+    "poethepoet>=0.46.0",
+    "poethepoet-tasks>=0.3.0",
+  ]
+
+[dependency-groups]
+  dev = [
+    "pyright>=1.1.411",
+  ]
+
+[build-system]
+  requires      = [
+    "uv_build>=0.11.2,<0.12.0",
+  ]
+  build-backend = "uv_build"
+
+[tool.poe]
+  include_script = "poe_tasks:tasks"
+
+[tool.pyright]
+  extends  = "../pyproject.toml"
+  stubPath = "./stubs"
+
+[tool.ruff]
+  extend = "../pyproject.toml"
+
+  src = ["./src"]
+
+  [tool.ruff.lint.flake8-type-checking]
+    runtime-evaluated-base-classes = [
+      "aeth_ext.settings.BaseSettings",
+      "aeth_ext.types.__init__.EmailMessageParts",
+      "aeth_ext.types.__init__.AddressLike",
+      "pydantic_settings.main.BaseSettings",
+      "aeth_ext.types.AddressLike",
+      "pydantic.main.BaseModel",
+    ]
+
+[[tool.uv.index]]
+  name        = "SFTPyPI"
+  url         = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple"
+  publish-url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/"
