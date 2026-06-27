@@ -53,3 +53,26 @@ tasks.add(
     "cmd": f'bash "{_script_path("docker-pin-latest.sh")}"',
   },
 )
+
+tasks.add(
+  task_name="rescind-release",
+  task_config={
+    "help": (
+      "Fully rescind a release: removes the package from SFTPyPI, deletes the GitHub release, "
+      "and removes the Git tag (local and remote). Defaults to the most recent release; "
+      "when defaulting, also rewinds the local branch to the previous release commit "
+      "(all changes from the release are kept in the working tree). "
+      "Usage: poe rescind-release [version]"
+    ),
+    "envfile": ".env",
+    "cmd": f'bash "{_script_path("rescind-release.sh")}" "${{version}}"',
+    "args": [
+      {
+        "name": "version",
+        "positional": True,
+        "default": "",
+        "help": "Version to rescind (e.g. 1.2.3). Defaults to the most recent release.",
+      },
+    ],
+  },
+)
