@@ -42,3 +42,14 @@ tasks.add(
     "cmd": f'powershell -NoProfile -ExecutionPolicy Bypass -File "{_script_path("fix-git-bash-workspace.ps1")}"',
   },
 )
+
+tasks.add(
+  task_name="docker-pin-latest",
+  task_config={
+    "help": (
+      "Auto-detect the docker compose file in the project root, fetch the latest "
+      "released version of its PACKAGE_NAME from SFTPyPI, and update PACKAGE_VERSION in place."
+    ),
+    "cmd": f'bash "{_script_path("docker-pin-latest.sh")}"',
+  },
+)
