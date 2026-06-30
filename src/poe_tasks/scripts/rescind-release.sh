@@ -13,7 +13,7 @@
 set -euo pipefail
 
 TARGET_VERSION="${1:-}"
-TARGET_VERSION="${TARGET_VERSION#v}"   # strip leading 'v' if present
+TARGET_VERSION="${TARGET_VERSION#v}" # strip leading 'v' if present
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # ── Read package name from pyproject.toml ────────────────────────────────────
@@ -91,9 +91,9 @@ http_status=$(
         -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${TARGET_VERSION}"
 )
 case "$http_status" in
-    200|204) echo "        Removed ${PACKAGE_NAME}==${TARGET_VERSION} from SFTPyPI." ;;
-    404)     echo "        ${PACKAGE_NAME}==${TARGET_VERSION} not found on SFTPyPI (already removed)." ;;
-    *)       echo "        WARNING: Unexpected HTTP ${http_status} from SFTPyPI. Manual cleanup may be needed." ;;
+200 | 204) echo "        Removed ${PACKAGE_NAME}==${TARGET_VERSION} from SFTPyPI." ;;
+404) echo "        ${PACKAGE_NAME}==${TARGET_VERSION} not found on SFTPyPI (already removed)." ;;
+*) echo "        WARNING: Unexpected HTTP ${http_status} from SFTPyPI. Manual cleanup may be needed." ;;
 esac
 
 # ── 3. Local tag ──────────────────────────────────────────────────────────────
