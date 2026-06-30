@@ -17,13 +17,13 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Argument parsing: strip optional --force/-f flag, leaving positional args
 # ---------------------------------------------------------------------------
-_force_env="${force:-}"  # Capture poe env var (set to "True" by boolean arg) before overwriting
+_force_env="${force:-}" # Capture poe env var (set to "True" by boolean arg) before overwriting
 force=false
 args=()
 for arg in "$@"; do
   case "${arg}" in
-    --force | -f) force=true ;;
-    *) args+=("${arg}") ;;
+  --force | -f) force=true ;;
+  *) args+=("${arg}") ;;
   esac
 done
 # Respect the 'force' env var injected by poe (type=boolean sets it to "True")
@@ -69,8 +69,11 @@ if [[ -n "$(git status --porcelain)" ]]; then
     printf "Continue with release anyway? [y/N] " >&2
     read -r _response
     case "${_response}" in
-      [yY] | [yY][eE][sS]) echo "Continuing..." ;;
-      *) echo "Aborting." >&2; exit 1 ;;
+    [yY] | [yY][eE][sS]) echo "Continuing..." ;;
+    *)
+      echo "Aborting." >&2
+      exit 1
+      ;;
     esac
   fi
 fi
