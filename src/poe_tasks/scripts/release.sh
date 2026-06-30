@@ -18,7 +18,6 @@ bump_type="${1:?Usage: release.sh <major|minor|patch>}"
 notes_text="${2:-}"
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-VERSION_BUMPED=false
 COMMITTED=false
 TAGGED=false
 PUSHED=false
@@ -32,10 +31,13 @@ UVLOCK_WAS_PRESENT=false
 DIST_SNAPSHOT_DIR=""
 
 cleanup() {
-  local exit_code=$?
+  # SC2155: declare and assign separately so `local` does not mask $?
+  local exit_code
+  exit_code=$?
+  # Disable errexit and nounset so every rollback step runs regardless of failures
   set +eu
 
-  if [ $exit_code -eq 0 ]; then
+  if [ "${exit_code}" -eq 0 ]; then
     if [ -n "${SNAPSHOT_DIR:-}" ] && [ -d "${SNAPSHOT_DIR}" ]; then
       rm -rf "${SNAPSHOT_DIR}" 2>/dev/null || true
     fi
@@ -112,6 +114,9 @@ cleanup() {
 
 trap cleanup EXIT
 
+# ---------------------------------------------------------------------------
+# Snapshot pre-run state so cleanup can restore files on failure
+# ---------------------------------------------------------------------------
 SNAPSHOT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t release-snapshot)
 PYPROJECT_SNAPSHOT="${SNAPSHOT_DIR}/pyproject.toml"
 UVLOCK_SNAPSHOT="${SNAPSHOT_DIR}/uv.lock"
@@ -127,10 +132,13 @@ for artifact in dist/*.whl dist/*.tar.gz; do
   cp "${artifact}" "${DIST_SNAPSHOT_DIR}/"
 done
 
+# ---------------------------------------------------------------------------
+# Bump version, commit, tag, and push
+# ---------------------------------------------------------------------------
 UV_VERSION_OUTPUT=$(uv version --bump "${bump_type}")
-PACKAGE_NAME=$(echo "${UV_VERSION_OUTPUT}" | awk '{print $1}' | tr '_' '-')
-NEW_VERSION=$(echo "${UV_VERSION_OUTPUT}" | awk '{print $NF}')
-VERSION_BUMPED=true
+# Extract package name (normalising underscores to dashes) and the new version
+# from uv's output in a single awk pass instead of two separate pipelines.
+read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<< "${UV_VERSION_OUTPUT}")
 uv sync
 git add pyproject.toml uv.lock
 git commit -m "Bump version to ${NEW_VERSION}"
@@ -139,8 +147,16 @@ git tag -a "v${NEW_VERSION}" -m "Version ${NEW_VERSION}"
 TAGGED=true
 git push --follow-tags
 PUSHED=true
+
+# ---------------------------------------------------------------------------
+# Build distribution artefacts
+# ---------------------------------------------------------------------------
 rm -f dist/*.whl dist/*.tar.gz
 uv build
+
+# ---------------------------------------------------------------------------
+# Publish to SFTPyPI
+# ---------------------------------------------------------------------------
 # Remove any pre-existing version from the index before publishing to avoid
 # checksum-mismatch errors when re-releasing the same version number.
 echo "Checking SFTPyPI for a pre-existing v${NEW_VERSION}..."
@@ -160,6 +176,10 @@ uv publish --index SFTPyPI \
   --username "${UV_INDEX_SFTPYPI_USERNAME}" \
   --password "${UV_INDEX_SFTPYPI_PASSWORD}"
 PUBLISHED_PYPI=true
+
+# ---------------------------------------------------------------------------
+# Create GitHub release
+# ---------------------------------------------------------------------------
 if [ -n "${notes_text}" ]; then
   gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --notes "${notes_text}"
 else
