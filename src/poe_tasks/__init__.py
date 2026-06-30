@@ -16,20 +16,28 @@ tasks = TaskCollection()
 tasks.add(
   task_name="release",
   task_config={
-    "help": ("Bump version, commit, tag, build, and publish to GitHub and SFTPyPI. Usage: poe release [major|minor|patch]"),
+    "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.",
     "envfile": ".env",
     "cmd": f'bash "{_script_path("release.sh")}" ${{bump_type}} "${{notes}}"',
     "args": [
       {
         "name": "bump_type",
         "positional": True,
-        "help": "Version component to bump: major, minor, or patch",
+        "help": "Version component to bump",
+        "choices": ["major", "minor", "patch", "stable", "alpha", "beta", "rc", "post", "dev"],
       },
       {
         "name": "notes",
         "positional": True,
         "default": "",
         "help": "Optional release notes for the GitHub release (omit to auto-generate from commits)",
+      },
+      {
+        "name": "force",
+        "options": ["--force", "-f"],
+        "type": "boolean",
+        "default": False,
+        "help": "Skip the uncommitted changes check and proceed without prompting",
       },
     ],
   },

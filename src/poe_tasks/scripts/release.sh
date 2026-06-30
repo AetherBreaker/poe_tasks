@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh <major|minor|patch|stable|alpha|beta|rc|post|dev>
-# Typically invoked via: poe release <major|minor|patch>
+# Usage: bash scripts/release.sh [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev> [notes]
+# Typically invoked via: poe release [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev>
 #
 # On any error, all steps that were completed are rolled back:
 #   - GitHub release deleted
@@ -14,8 +14,24 @@
 
 set -euo pipefail
 
-bump_type="${1:?Usage: release.sh <major|minor|patch|stable|alpha|beta|rc|post|dev>}"
-notes_text="${2:-}"
+# ---------------------------------------------------------------------------
+# Argument parsing: strip optional --force/-f flag, leaving positional args
+# ---------------------------------------------------------------------------
+_force_env="${force:-}"  # Capture poe env var (set to "True" by boolean arg) before overwriting
+force=false
+args=()
+for arg in "$@"; do
+  case "${arg}" in
+    --force | -f) force=true ;;
+    *) args+=("${arg}") ;;
+  esac
+done
+# Respect the 'force' env var injected by poe (type=boolean sets it to "True")
+[[ "${_force_env}" == "True" ]] && force=true
+unset _force_env
+
+bump_type="${args[0]:?Usage: release.sh [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev>}"
+notes_text="${args[1]:-}"
 
 # Validate bump_type against all values accepted by `uv version --bump`
 case "${bump_type}" in
@@ -39,6 +55,24 @@ if ((${#missing_vars[@]} > 0)); then
     echo "  - ${var}" >&2
   done
   exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Guard: warn if the working tree has uncommitted changes
+# ---------------------------------------------------------------------------
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "WARNING: You have uncommitted changes:" >&2
+  git status --short >&2
+  if $force; then
+    echo "WARNING: Proceeding anyway (--force)." >&2
+  else
+    printf "Continue with release anyway? [y/N] " >&2
+    read -r _response
+    case "${_response}" in
+      [yY] | [yY][eE][sS]) echo "Continuing..." ;;
+      *) echo "Aborting." >&2; exit 1 ;;
+    esac
+  fi
 fi
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
