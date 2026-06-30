@@ -17,6 +17,20 @@ set -euo pipefail
 bump_type="${1:?Usage: release.sh <major|minor|patch>}"
 notes_text="${2:-}"
 
+# ---------------------------------------------------------------------------
+# Pre-flight: verify required environment variables are present
+# ---------------------------------------------------------------------------
+missing_vars=()
+[[ -z "${UV_INDEX_SFTPYPI_USERNAME:-}" ]] && missing_vars+=("UV_INDEX_SFTPYPI_USERNAME")
+[[ -z "${UV_INDEX_SFTPYPI_PASSWORD:-}" ]] && missing_vars+=("UV_INDEX_SFTPYPI_PASSWORD")
+if (( ${#missing_vars[@]} > 0 )); then
+  echo "ERROR: The following required environment variables are not set:" >&2
+  for var in "${missing_vars[@]}"; do
+    echo "  - ${var}" >&2
+  done
+  exit 1
+fi
+
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 COMMITTED=false
 TAGGED=false
@@ -138,7 +152,7 @@ done
 UV_VERSION_OUTPUT=$(uv version --bump "${bump_type}")
 # Extract package name (normalising underscores to dashes) and the new version
 # from uv's output in a single awk pass instead of two separate pipelines.
-read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<< "${UV_VERSION_OUTPUT}")
+read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<<"${UV_VERSION_OUTPUT}")
 uv sync
 git add pyproject.toml uv.lock
 git commit -m "Bump version to ${NEW_VERSION}"
