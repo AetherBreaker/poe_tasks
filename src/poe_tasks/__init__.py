@@ -63,6 +63,22 @@ tasks.add(
 )
 
 tasks.add(
+  task_name="release-and-pin",
+  task_config={
+    "help": (
+      "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI, "
+      "then pin the docker-compose package version. "
+      "Accepts the same arguments as the release task."
+    ),
+    "envfile": ".env",
+    "sequence": [
+      "release $POE_EXTRA_ARGS",
+      "docker-pin-latest",
+    ],
+  },
+)
+
+tasks.add(
   task_name="rescind-release",
   task_config={
     "help": (
