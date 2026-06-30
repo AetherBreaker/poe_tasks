@@ -19,12 +19,12 @@ notes_text="${2:-}"
 
 # Validate bump_type against all values accepted by `uv version --bump`
 case "${bump_type}" in
-  major | minor | patch | stable | alpha | beta | rc | post | dev) ;;
-  *)
-    echo "ERROR: Invalid bump type '${bump_type}'." >&2
-    echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
-    exit 1
-    ;;
+major | minor | patch | stable | alpha | beta | rc | post | dev) ;;
+*)
+  echo "ERROR: Invalid bump type '${bump_type}'." >&2
+  echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+  exit 1
+  ;;
 esac
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ esac
 missing_vars=()
 [[ -z "${UV_INDEX_SFTPYPI_USERNAME:-}" ]] && missing_vars+=("UV_INDEX_SFTPYPI_USERNAME")
 [[ -z "${UV_INDEX_SFTPYPI_PASSWORD:-}" ]] && missing_vars+=("UV_INDEX_SFTPYPI_PASSWORD")
-if (( ${#missing_vars[@]} > 0 )); then
+if ((${#missing_vars[@]} > 0)); then
   echo "ERROR: The following required environment variables are not set:" >&2
   for var in "${missing_vars[@]}"; do
     echo "  - ${var}" >&2
