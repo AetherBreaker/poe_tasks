@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh <major|minor|patch>
+# Usage: bash scripts/release.sh <major|minor|patch|stable|alpha|beta|rc|post|dev>
 # Typically invoked via: poe release <major|minor|patch>
 #
 # On any error, all steps that were completed are rolled back:
@@ -14,8 +14,18 @@
 
 set -euo pipefail
 
-bump_type="${1:?Usage: release.sh <major|minor|patch>}"
+bump_type="${1:?Usage: release.sh <major|minor|patch|stable|alpha|beta|rc|post|dev>}"
 notes_text="${2:-}"
+
+# Validate bump_type against all values accepted by `uv version --bump`
+case "${bump_type}" in
+  major | minor | patch | stable | alpha | beta | rc | post | dev) ;;
+  *)
+    echo "ERROR: Invalid bump type '${bump_type}'." >&2
+    echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+    exit 1
+    ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Pre-flight: verify required environment variables are present
