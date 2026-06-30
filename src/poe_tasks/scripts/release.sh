@@ -48,8 +48,8 @@ cleanup() {
   # 1. Delete GitHub release (--cleanup-tag also removes the remote tag)
   if $RELEASED_GITHUB; then
     echo "  -> Deleting GitHub release v${NEW_VERSION} (and its remote tag)..."
-    gh release delete "v${NEW_VERSION}" --yes --cleanup-tag 2>/dev/null \
-      || echo "     WARNING: Could not delete GitHub release. Run manually: gh release delete v${NEW_VERSION} --yes --cleanup-tag"
+    gh release delete "v${NEW_VERSION}" --yes --cleanup-tag 2>/dev/null ||
+      echo "     WARNING: Could not delete GitHub release. Run manually: gh release delete v${NEW_VERSION} --yes --cleanup-tag"
   fi
 
   # 2. Remove package from SFTPyPI via devpi REST API
@@ -57,15 +57,15 @@ cleanup() {
     echo "  -> Removing ${PACKAGE_NAME}==${NEW_VERSION} from SFTPyPI..."
     curl -s -o /dev/null \
       -u "${UV_INDEX_SFTPYPI_USERNAME}:${UV_INDEX_SFTPYPI_PASSWORD}" \
-      -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}" \
-      || echo "     WARNING: Could not remove from SFTPyPI. Manual cleanup needed."
+      -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}" ||
+      echo "     WARNING: Could not remove from SFTPyPI. Manual cleanup needed."
   fi
 
   # 3. Delete remote tag (only if push succeeded but GitHub release cleanup did not run)
   if $PUSHED && ! $RELEASED_GITHUB; then
     echo "  -> Deleting remote tag v${NEW_VERSION}..."
-    git push origin --delete "v${NEW_VERSION}" 2>/dev/null \
-      || echo "     WARNING: Could not delete remote tag v${NEW_VERSION}."
+    git push origin --delete "v${NEW_VERSION}" 2>/dev/null ||
+      echo "     WARNING: Could not delete remote tag v${NEW_VERSION}."
   fi
 
   # 4. Delete local tag
@@ -76,8 +76,8 @@ cleanup() {
   # 5. Reset local version bump commit (mixed: keeps working tree, restores index)
   if $COMMITTED; then
     echo "  -> Resetting local version bump commit..."
-    git reset HEAD~1 \
-      || echo "     WARNING: Could not reset local commit. Run manually: git reset HEAD~1"
+    git reset HEAD~1 ||
+      echo "     WARNING: Could not reset local commit. Run manually: git reset HEAD~1"
   fi
 
   # 6. Restore pyproject.toml and uv.lock to their exact pre-run contents.
@@ -95,8 +95,8 @@ cleanup() {
   # 7. Force-push the rolled-back state to remote (local HEAD is now the pre-bump commit)
   if $PUSHED; then
     echo "  -> Force-pushing rollback to remote ${CURRENT_BRANCH}..."
-    git push --force origin "${CURRENT_BRANCH}" 2>/dev/null \
-      || echo "     WARNING: Could not force-push rollback. Run manually: git push --force origin ${CURRENT_BRANCH}"
+    git push --force origin "${CURRENT_BRANCH}" 2>/dev/null ||
+      echo "     WARNING: Could not force-push rollback. Run manually: git push --force origin ${CURRENT_BRANCH}"
   fi
 
   rm -f dist/*.whl dist/*.tar.gz 2>/dev/null || true
@@ -150,9 +150,9 @@ pre_delete_status=$(
     -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}"
 )
 case "$pre_delete_status" in
-  200|204) echo "  -> Removed pre-existing v${NEW_VERSION} from SFTPyPI index." ;;
-  404)     echo "  -> No pre-existing v${NEW_VERSION} found on SFTPyPI index." ;;
-  *)       echo "  -> WARNING: Unexpected status ${pre_delete_status} when checking SFTPyPI for pre-existing version." ;;
+200 | 204) echo "  -> Removed pre-existing v${NEW_VERSION} from SFTPyPI index." ;;
+404) echo "  -> No pre-existing v${NEW_VERSION} found on SFTPyPI index." ;;
+*) echo "  -> WARNING: Unexpected status ${pre_delete_status} when checking SFTPyPI for pre-existing version." ;;
 esac
 # Publish to devpi (SFTPyPI). Pass credentials explicitly — devpi does not
 # support OIDC/trusted publishing, so uv must receive them via CLI flags.
