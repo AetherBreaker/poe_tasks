@@ -28,7 +28,7 @@ echo "Compose  : ${COMPOSE_FILE}"
 # ---------------------------------------------------------------------------
 # Extract PACKAGE_NAME from the compose file build args
 # ---------------------------------------------------------------------------
-PACKAGE_NAME=$(grep -oP 'PACKAGE_NAME:\s*\K\S+' "${COMPOSE_FILE}" | head -1)
+PACKAGE_NAME=$(grep -oP 'PACKAGE_NAME:\s*\K\S+' "${COMPOSE_FILE}" | head -1 || true)
 
 if [ -z "${PACKAGE_NAME}" ]; then
   echo "ERROR: Could not find PACKAGE_NAME in ${COMPOSE_FILE}" >&2
@@ -53,7 +53,7 @@ fi
 PYFILE=$(mktemp --suffix=.py)
 trap 'rm -f "${PYFILE}"' EXIT
 
-cat > "${PYFILE}" <<'PYEOF'
+cat >"${PYFILE}" <<'PYEOF'
 import sys, re, json
 
 data = json.load(sys.stdin)
@@ -73,12 +73,12 @@ def version_key(v):
 print(max(versions, key=version_key))
 PYEOF
 
-LATEST_VERSION=$(echo "${API_JSON}" | uv run python "${PYFILE}")
+LATEST_VERSION=$(printf '%s\n' "${API_JSON}" | uv run python "${PYFILE}")
 
 # ---------------------------------------------------------------------------
 # Update PACKAGE_VERSION in the compose file
 # ---------------------------------------------------------------------------
-CURRENT_VERSION=$(grep -oP 'PACKAGE_VERSION:\s*\K[\d.]+' "${COMPOSE_FILE}" | head -1)
+CURRENT_VERSION=$(grep -oP 'PACKAGE_VERSION:\s*\K[\d.]+' "${COMPOSE_FILE}" | head -1 || true)
 
 echo "Current  : ${CURRENT_VERSION:-<not set>}"
 echo "Latest   : ${LATEST_VERSION}"
@@ -91,3 +91,12 @@ fi
 sed -i -E "s/^([[:space:]]*PACKAGE_VERSION:[[:space:]]*)[0-9]+(\.[0-9]+)*/\1${LATEST_VERSION}/" "${COMPOSE_FILE}"
 
 echo "Updated PACKAGE_VERSION: ${CURRENT_VERSION:-<not set>} -> ${LATEST_VERSION} in ${COMPOSE_FILE}"
+
+# ---------------------------------------------------------------------------
+# Commit the change and push to remote
+# ---------------------------------------------------------------------------
+git add "${COMPOSE_FILE}"
+git commit -m "chore: pin ${PACKAGE_NAME} to ${LATEST_VERSION}"
+git push
+
+echo "Committed and pushed: ${COMPOSE_FILE}"
