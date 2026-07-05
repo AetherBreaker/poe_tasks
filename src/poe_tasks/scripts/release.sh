@@ -247,3 +247,9 @@ else
   gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --generate-notes
 fi
 RELEASED_GITHUB=true
+
+# ---------------------------------------------------------------------------
+# Restore development dependencies
+# ---------------------------------------------------------------------------
+uv sync --all-extras
+
