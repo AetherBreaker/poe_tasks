@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh [--force] <bump_types> [notes]
-#   $1 : comma-separated bump types (e.g. "minor" or "major,alpha")
+# Usage: bash scripts/release.sh [--force] [bump_types] [notes]
+#   $1 : comma-separated bump types (e.g. "minor" or "major,alpha"); omit to publish current version
 #   $2 : optional release notes
-# Typically invoked via: poe release [--force] --bump <type>[,<type>...] [--notes <notes>]
+# Typically invoked via: poe release [--force] [--bump <type>[,<type>...]] [--notes <notes>]
 # Examples:
 #   poe release --bump patch
 #   poe release --bump major,alpha
 #   poe release --bump minor --notes "initial minor release"
+#   poe release                         # publish current version without bumping
 #
 # On any error, all steps that were completed are rolled back:
 #   - GitHub release deleted
@@ -48,29 +49,32 @@ done
 [[ "${_force_env}" == "True" ]] && force=true
 unset _force_env
 
-# $1 (args[0]) = comma-separated bump types string (e.g. "major,alpha" or just "minor")
+# $1 (args[0]) = comma-separated bump types string (e.g. "major,alpha" or just "minor"); empty = no-bump mode
 # $2 (args[1]) = optional notes
-bump_types_str="${args[0]:?Usage: poe release --bump <type>[,<type>...] [--notes <notes>]}"
+bump_types_str="${args[0]:-}"
 notes_text="${args[1]:-}"
 
-# Split the comma-separated bump types string into an array
-IFS=',' read -ra BUMP_TYPES <<<"${bump_types_str}"
+# Split the comma-separated bump types string into an array (empty when --bump is omitted)
+BUMP_TYPES=()
+if [[ -n "${bump_types_str}" ]]; then
+  IFS=',' read -ra BUMP_TYPES <<<"${bump_types_str}"
 
-if ((${#BUMP_TYPES[@]} == 0)); then
-  echo "ERROR: At least one --bump type is required." >&2
-  echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
-  exit 1
-fi
-
-# Validate each bump type
-for _bt in "${BUMP_TYPES[@]}"; do
-  if ! is_bump_type "${_bt}"; then
-    echo "ERROR: Invalid bump type '${_bt}'." >&2
+  if ((${#BUMP_TYPES[@]} == 0)); then
+    echo "ERROR: At least one --bump type is required." >&2
     echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
     exit 1
   fi
-done
-unset _bt
+
+  # Validate each bump type
+  for _bt in "${BUMP_TYPES[@]}"; do
+    if ! is_bump_type "${_bt}"; then
+      echo "ERROR: Invalid bump type '${_bt}'." >&2
+      echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+      exit 1
+    fi
+  done
+  unset _bt
+fi
 
 # ---------------------------------------------------------------------------
 # Pre-flight: verify required environment variables are present
@@ -111,6 +115,7 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 COMMITTED=false
 TAGGED=false
 PUSHED=false
+PUSHED_BRANCH=false
 PUBLISHED_PYPI=false
 RELEASED_GITHUB=false
 NEW_VERSION=""
@@ -185,7 +190,7 @@ cleanup() {
   fi
 
   # 7. Force-push the rolled-back state to remote (local HEAD is now the pre-bump commit)
-  if $PUSHED; then
+  if $PUSHED_BRANCH; then
     echo "  -> Force-pushing rollback to remote ${CURRENT_BRANCH}..."
     git push --force origin "${CURRENT_BRANCH}" 2>/dev/null ||
       echo "     WARNING: Could not force-push rollback. Run manually: git push --force origin ${CURRENT_BRANCH}"
@@ -222,65 +227,138 @@ for artifact in dist/*.whl dist/*.tar.gz; do
   cp "${artifact}" "${DIST_SNAPSHOT_DIR}/"
 done
 
-# ---------------------------------------------------------------------------
-# Bump version, commit, tag, and push
-# ---------------------------------------------------------------------------
-_uv_bump_args=()
-for _bt in "${BUMP_TYPES[@]}"; do
-  _uv_bump_args+=("--bump" "${_bt}")
-done
-UV_VERSION_OUTPUT=$(uv version "${_uv_bump_args[@]}")
-unset _uv_bump_args _bt
-# Extract package name (normalising underscores to dashes) and the new version
-# from uv's output in a single awk pass instead of two separate pipelines.
-read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<<"${UV_VERSION_OUTPUT}")
-uv sync
-git add pyproject.toml uv.lock
-git commit -m "Bump version to ${NEW_VERSION}"
-COMMITTED=true
-git tag -a "v${NEW_VERSION}" -m "Version ${NEW_VERSION}"
-TAGGED=true
-git push --follow-tags
-PUSHED=true
+if [[ -n "${bump_types_str}" ]]; then
+  # ---------------------------------------------------------------------------
+  # Bump mode: bump version, commit, tag, and push
+  # ---------------------------------------------------------------------------
+  _uv_bump_args=()
+  for _bt in "${BUMP_TYPES[@]}"; do
+    _uv_bump_args+=("--bump" "${_bt}")
+  done
+  UV_VERSION_OUTPUT=$(uv version "${_uv_bump_args[@]}")
+  unset _uv_bump_args _bt
+  # Extract package name (normalising underscores to dashes) and the new version
+  # from uv's output in a single awk pass instead of two separate pipelines.
+  read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<<"${UV_VERSION_OUTPUT}")
+  uv sync
+  git add pyproject.toml uv.lock
+  git commit -m "Bump version to ${NEW_VERSION}"
+  COMMITTED=true
+  git tag -a "v${NEW_VERSION}" -m "Version ${NEW_VERSION}"
+  TAGGED=true
+  git push --follow-tags
+  PUSHED=true
+  PUSHED_BRANCH=true
 
-# ---------------------------------------------------------------------------
-# Build distribution artefacts
-# ---------------------------------------------------------------------------
-rm -f dist/*.whl dist/*.tar.gz
-uv build
+  # -------------------------------------------------------------------------
+  # Build distribution artefacts
+  # -------------------------------------------------------------------------
+  rm -f dist/*.whl dist/*.tar.gz
+  uv build
 
-# ---------------------------------------------------------------------------
-# Publish to SFTPyPI
-# ---------------------------------------------------------------------------
-# Remove any pre-existing version from the index before publishing to avoid
-# checksum-mismatch errors when re-releasing the same version number.
-echo "Checking SFTPyPI for a pre-existing v${NEW_VERSION}..."
-pre_delete_status=$(
-  curl -s -o /dev/null -w "%{http_code}" \
-    -u "${UV_INDEX_SFTPYPI_USERNAME}:${UV_INDEX_SFTPYPI_PASSWORD}" \
-    -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}"
-)
-case "$pre_delete_status" in
-200 | 204) echo "  -> Removed pre-existing v${NEW_VERSION} from SFTPyPI index." ;;
-404) echo "  -> No pre-existing v${NEW_VERSION} found on SFTPyPI index." ;;
-*) echo "  -> WARNING: Unexpected status ${pre_delete_status} when checking SFTPyPI for pre-existing version." ;;
-esac
-# Publish to devpi (SFTPyPI). Pass credentials explicitly — devpi does not
-# support OIDC/trusted publishing, so uv must receive them via CLI flags.
-uv publish --index SFTPyPI \
-  --username "${UV_INDEX_SFTPYPI_USERNAME}" \
-  --password "${UV_INDEX_SFTPYPI_PASSWORD}"
-PUBLISHED_PYPI=true
+  # -------------------------------------------------------------------------
+  # Publish to SFTPyPI
+  # -------------------------------------------------------------------------
+  # Remove any pre-existing version from the index before publishing to avoid
+  # checksum-mismatch errors when re-releasing the same version number.
+  echo "Checking SFTPyPI for a pre-existing v${NEW_VERSION}..."
+  pre_delete_status=$(
+    curl -s -o /dev/null -w "%{http_code}" \
+      -u "${UV_INDEX_SFTPYPI_USERNAME}:${UV_INDEX_SFTPYPI_PASSWORD}" \
+      -X DELETE "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}"
+  )
+  case "$pre_delete_status" in
+  200 | 204) echo "  -> Removed pre-existing v${NEW_VERSION} from SFTPyPI index." ;;
+  404) echo "  -> No pre-existing v${NEW_VERSION} found on SFTPyPI index." ;;
+  *) echo "  -> WARNING: Unexpected status ${pre_delete_status} when checking SFTPyPI for pre-existing version." ;;
+  esac
+  # Publish to devpi (SFTPyPI). Pass credentials explicitly — devpi does not
+  # support OIDC/trusted publishing, so uv must receive them via CLI flags.
+  uv publish --index SFTPyPI \
+    --username "${UV_INDEX_SFTPYPI_USERNAME}" \
+    --password "${UV_INDEX_SFTPYPI_PASSWORD}"
+  PUBLISHED_PYPI=true
 
-# ---------------------------------------------------------------------------
-# Create GitHub release
-# ---------------------------------------------------------------------------
-if [ -n "${notes_text}" ]; then
-  gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --notes "${notes_text}"
+  # -------------------------------------------------------------------------
+  # Create GitHub release
+  # -------------------------------------------------------------------------
+  if [ -n "${notes_text}" ]; then
+    gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --notes "${notes_text}"
+  else
+    gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --generate-notes
+  fi
+  RELEASED_GITHUB=true
+
 else
-  gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --generate-notes
+  # ---------------------------------------------------------------------------
+  # No-bump mode: publish the current version without bumping
+  # ---------------------------------------------------------------------------
+  # Get current version and package name
+  UV_VERSION_OUTPUT=$(uv version)
+  read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<<"${UV_VERSION_OUTPUT}")
+
+  # Abort if a local git tag already exists for this version
+  if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+    echo "ERROR: Local git tag v${NEW_VERSION} already exists." >&2
+    exit 1
+  fi
+  # Abort if a remote git tag already exists for this version
+  if git ls-remote --tags origin "refs/tags/v${NEW_VERSION}" | grep -q .; then
+    echo "ERROR: Remote git tag v${NEW_VERSION} already exists." >&2
+    exit 1
+  fi
+  # Abort if a GitHub release already exists for this version
+  if gh release view "v${NEW_VERSION}" >/dev/null 2>&1; then
+    echo "ERROR: GitHub release v${NEW_VERSION} already exists." >&2
+    exit 1
+  fi
+  # Abort if SFTPyPI already has a package at this version
+  _sftpypi_check_status=$(
+    curl -s -o /dev/null -w "%{http_code}" \
+      -u "${UV_INDEX_SFTPYPI_USERNAME}:${UV_INDEX_SFTPYPI_PASSWORD}" \
+      "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/${PACKAGE_NAME}/${NEW_VERSION}"
+  )
+  if [[ "${_sftpypi_check_status}" == "200" ]]; then
+    echo "ERROR: Package ${PACKAGE_NAME}==${NEW_VERSION} already exists on SFTPyPI." >&2
+    exit 1
+  fi
+  unset _sftpypi_check_status
+
+  # -------------------------------------------------------------------------
+  # Build distribution artefacts
+  # -------------------------------------------------------------------------
+  rm -f dist/*.whl dist/*.tar.gz
+  uv build
+
+  # -------------------------------------------------------------------------
+  # Publish to SFTPyPI
+  # -------------------------------------------------------------------------
+  # Publish to devpi (SFTPyPI). Pass credentials explicitly — devpi does not
+  # support OIDC/trusted publishing, so uv must receive them via CLI flags.
+  uv publish --index SFTPyPI \
+    --username "${UV_INDEX_SFTPYPI_USERNAME}" \
+    --password "${UV_INDEX_SFTPYPI_PASSWORD}"
+  PUBLISHED_PYPI=true
+
+  # -------------------------------------------------------------------------
+  # Tag and push
+  # -------------------------------------------------------------------------
+  git tag -a "v${NEW_VERSION}" -m "Version ${NEW_VERSION}"
+  TAGGED=true
+  git push origin "v${NEW_VERSION}"
+  PUSHED=true
+
+  # -------------------------------------------------------------------------
+  # Create GitHub release
+  # -------------------------------------------------------------------------
+  if [ -n "${notes_text}" ]; then
+    gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --notes "${notes_text}"
+  else
+    gh release create "v${NEW_VERSION}" dist/* --title "v${NEW_VERSION}" --generate-notes
+  fi
+  RELEASED_GITHUB=true
+
 fi
-RELEASED_GITHUB=true
 
 # ---------------------------------------------------------------------------
 # Restore development dependencies

@@ -16,18 +16,19 @@ tasks = TaskCollection()
 tasks.add(
   task_name="release",
   task_config={
-    "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.",
+    "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI. If --bump is omitted, publishes the current version without bumping.",
     "envfile": ".env",
     "cmd": f'bash "{_script_path("release.sh")}" ${{bump}} "${{notes}}"',
     "args": [
       {
         "name": "bump",
         "options": ["--bump", "-b"],
-        "required": True,
+        "default": "",
         "help": (
           "Version component(s) to bump. For multiple components use a comma-separated list "
           "(e.g. --bump minor or --bump major,alpha). "
-          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev."
+          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
+          "If omitted, publishes the current version without bumping."
         ),
       },
       {
