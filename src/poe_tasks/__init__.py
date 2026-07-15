@@ -18,19 +18,23 @@ tasks.add(
   task_config={
     "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.",
     "envfile": ".env",
-    "cmd": f'bash "{_script_path("release.sh")}" ${{bump_types}}',
+    "cmd": f'bash "{_script_path("release.sh")}" ${{bump}} "${{notes}}"',
     "args": [
       {
-        "name": "bump_types",
-        "positional": True,
-        "nargs": "+",
+        "name": "bump",
+        "options": ["--bump", "-b"],
+        "required": True,
         "help": (
-          "One or more version components to bump (e.g. 'major alpha'). "
-          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
-          "Optionally append release notes as the final argument — if the last word "
-          "does not match a bump type it is treated as the GitHub release notes "
-          "(omit to auto-generate from commits)."
+          "Version component(s) to bump. For multiple components use a comma-separated list "
+          "(e.g. --bump minor or --bump major,alpha). "
+          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev."
         ),
+      },
+      {
+        "name": "notes",
+        "options": ["--notes", "-n"],
+        "default": "",
+        "help": "Optional release notes for the GitHub release (omit to auto-generate from commits)",
       },
       {
         "name": "force",
@@ -69,7 +73,7 @@ tasks.add(
       "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI, "
       "then pin the docker-compose package version. "
       "Accepts the same arguments as the release task "
-      "(one or more bump types, optional trailing release notes, --force)."
+      "(--bump <type>[,<type>...], optional --notes, --force)."
     ),
     "envfile": ".env",
     "sequence": [
