@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh [--force] <bump_type> [<bump_type>...] [notes]
-#   bump_type : one or more of major|minor|patch|stable|alpha|beta|rc|post|dev
-#   notes     : optional release notes (last argument, if it is not a bump-type keyword)
-# Typically invoked via: poe release [--force] <bump_type> [<bump_type>...] [notes]
+# Usage: bash scripts/release.sh [--force] <bump_types> [notes]
+#   $1 : comma-separated bump types (e.g. "minor" or "major,alpha")
+#   $2 : optional release notes
+# Typically invoked via: poe release [--force] --bump <type>[,<type>...] [--notes <notes>]
 # Examples:
-#   poe release patch
-#   poe release major alpha
-#   poe release minor "initial minor release"
+#   poe release --bump patch
+#   poe release --bump major,alpha
+#   poe release --bump minor --notes "initial minor release"
 #
 # On any error, all steps that were completed are rolled back:
 #   - GitHub release deleted
@@ -31,9 +31,12 @@ is_bump_type() {
 }
 
 # ---------------------------------------------------------------------------
-# Argument parsing: strip optional --force/-f flag, leaving positional args
+# Argument parsing
 # ---------------------------------------------------------------------------
-_force_env="${force:-}" # Capture poe env var (set to "True" by boolean arg) before overwriting
+# poe injects --force/-f as env var 'force=True' (type=boolean) and joins
+# repeated --bump values with a space into $1. Notes (optional positional) is $2.
+# We also handle --force/-f flags if the script is invoked directly.
+_force_env="${force:-}"
 force=false
 args=()
 for arg in "$@"; do
@@ -42,30 +45,19 @@ for arg in "$@"; do
   *) args+=("${arg}") ;;
   esac
 done
-# Respect the 'force' env var injected by poe (type=boolean sets it to "True")
 [[ "${_force_env}" == "True" ]] && force=true
 unset _force_env
 
-if ((${#args[@]} == 0)); then
-  echo "ERROR: At least one bump type is required." >&2
-  echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
-  exit 1
-fi
+# $1 (args[0]) = comma-separated bump types string (e.g. "major,alpha" or just "minor")
+# $2 (args[1]) = optional notes
+bump_types_str="${args[0]:?Usage: poe release --bump <type>[,<type>...] [--notes <notes>]}"
+notes_text="${args[1]:-}"
 
-# If the last positional arg is NOT a bump-type keyword, treat it as release notes.
-# This allows: poe release major alpha "my release notes"
-_last_arg="${args[-1]}"
-notes_text=""
-if is_bump_type "${_last_arg}"; then
-  BUMP_TYPES=("${args[@]}")
-else
-  notes_text="${_last_arg}"
-  BUMP_TYPES=("${args[@]:0:$((${#args[@]} - 1))}")
-fi
-unset _last_arg
+# Split the comma-separated bump types string into an array
+IFS=',' read -ra BUMP_TYPES <<<"${bump_types_str}"
 
 if ((${#BUMP_TYPES[@]} == 0)); then
-  echo "ERROR: At least one bump type is required." >&2
+  echo "ERROR: At least one --bump type is required." >&2
   echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
   exit 1
 fi
