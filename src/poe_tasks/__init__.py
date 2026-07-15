@@ -105,3 +105,16 @@ tasks.add(
     ],
   },
 )
+
+tasks.add(
+  task_name="deploy-test",
+  task_config={
+    "help": (
+      "Check if the current pyproject.toml version is released on SFTPyPI or GitHub, "
+      "then pin that version in the testing branch's docker-compose file. "
+      "Creates the testing branch as an orphan (no history) if it doesn't exist on remote, "
+      "seeding it with the compose/Docker/ignore files from the active branch."
+    ),
+    "cmd": f'bash "{_script_path("deploy-test.sh")}"',
+  },
+)
