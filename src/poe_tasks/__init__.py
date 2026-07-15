@@ -18,15 +18,15 @@ tasks.add(
   task_config={
     "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.",
     "envfile": ".env",
-    "cmd": f'bash "{_script_path("release.sh")}" ${{bump_types}}',
+    "cmd": f'bash "{_script_path("release.sh")}" "${{bump_type}}" $POE_EXTRA_ARGS',
     "args": [
       {
-        "name": "bump_types",
+        "name": "bump_type",
         "positional": True,
-        "nargs": "+",
         "help": (
-          "One or more version components to bump (e.g. 'major alpha'). "
+          "Primary version component to bump. "
           "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
+          "Additional bump types may follow (e.g. poe release major alpha). "
           "Optionally append release notes as the final argument — if the last word "
           "does not match a bump type it is treated as the GitHub release notes "
           "(omit to auto-generate from commits)."
@@ -99,5 +99,18 @@ tasks.add(
         "help": "Version to rescind (e.g. 1.2.3). Defaults to the most recent release.",
       },
     ],
+  },
+)
+
+tasks.add(
+  task_name="deploy-test",
+  task_config={
+    "help": (
+      "Check if the current pyproject.toml version is released on SFTPyPI or GitHub, "
+      "then pin that version in the testing branch's docker-compose file. "
+      "Creates the testing branch as an orphan (no history) if it doesn't exist on remote, "
+      "seeding it with the compose/Docker/ignore files from the active branch."
+    ),
+    "cmd": f'bash "{_script_path("deploy-test.sh")}"',
   },
 )
