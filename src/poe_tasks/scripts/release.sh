@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev> [notes]
-# Typically invoked via: poe release [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev>
+# Usage: bash scripts/release.sh [--force] <bump_type> [<bump_type>...] [notes]
+#   bump_type : one or more of major|minor|patch|stable|alpha|beta|rc|post|dev
+#   notes     : optional release notes (last argument, if it is not a bump-type keyword)
+# Typically invoked via: poe release [--force] <bump_type> [<bump_type>...] [notes]
+# Examples:
+#   poe release patch
+#   poe release major alpha
+#   poe release minor "initial minor release"
 #
 # On any error, all steps that were completed are rolled back:
 #   - GitHub release deleted
@@ -13,6 +19,16 @@
 #   - Remote branch force-pushed back to the pre-bump state
 
 set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Helper: return 0 if $1 is a valid uv version --bump keyword
+# ---------------------------------------------------------------------------
+is_bump_type() {
+  case "${1:-}" in
+  major | minor | patch | stable | alpha | beta | rc | post | dev) return 0 ;;
+  *) return 1 ;;
+  esac
+}
 
 # ---------------------------------------------------------------------------
 # Argument parsing: strip optional --force/-f flag, leaving positional args
@@ -30,18 +46,39 @@ done
 [[ "${_force_env}" == "True" ]] && force=true
 unset _force_env
 
-bump_type="${args[0]:?Usage: release.sh [--force] <major|minor|patch|stable|alpha|beta|rc|post|dev>}"
-notes_text="${args[1]:-}"
-
-# Validate bump_type against all values accepted by `uv version --bump`
-case "${bump_type}" in
-major | minor | patch | stable | alpha | beta | rc | post | dev) ;;
-*)
-  echo "ERROR: Invalid bump type '${bump_type}'." >&2
+if ((${#args[@]} == 0)); then
+  echo "ERROR: At least one bump type is required." >&2
   echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
   exit 1
-  ;;
-esac
+fi
+
+# If the last positional arg is NOT a bump-type keyword, treat it as release notes.
+# This allows: poe release major alpha "my release notes"
+_last_arg="${args[-1]}"
+notes_text=""
+if is_bump_type "${_last_arg}"; then
+  BUMP_TYPES=("${args[@]}")
+else
+  notes_text="${_last_arg}"
+  BUMP_TYPES=("${args[@]:0:$((${#args[@]} - 1))}")
+fi
+unset _last_arg
+
+if ((${#BUMP_TYPES[@]} == 0)); then
+  echo "ERROR: At least one bump type is required." >&2
+  echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+  exit 1
+fi
+
+# Validate each bump type
+for _bt in "${BUMP_TYPES[@]}"; do
+  if ! is_bump_type "${_bt}"; then
+    echo "ERROR: Invalid bump type '${_bt}'." >&2
+    echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+    exit 1
+  fi
+done
+unset _bt
 
 # ---------------------------------------------------------------------------
 # Pre-flight: verify required environment variables are present
@@ -196,7 +233,12 @@ done
 # ---------------------------------------------------------------------------
 # Bump version, commit, tag, and push
 # ---------------------------------------------------------------------------
-UV_VERSION_OUTPUT=$(uv version --bump "${bump_type}")
+_uv_bump_args=()
+for _bt in "${BUMP_TYPES[@]}"; do
+  _uv_bump_args+=("--bump" "${_bt}")
+done
+UV_VERSION_OUTPUT=$(uv version "${_uv_bump_args[@]}")
+unset _uv_bump_args _bt
 # Extract package name (normalising underscores to dashes) and the new version
 # from uv's output in a single awk pass instead of two separate pipelines.
 read -r PACKAGE_NAME NEW_VERSION < <(awk '{gsub(/_/, "-", $1); print $1, $NF}' <<<"${UV_VERSION_OUTPUT}")
@@ -252,4 +294,3 @@ RELEASED_GITHUB=true
 # Restore development dependencies
 # ---------------------------------------------------------------------------
 uv sync --all-extras
-
