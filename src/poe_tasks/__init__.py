@@ -59,10 +59,21 @@ tasks.add(
   task_name="docker-pin-latest",
   task_config={
     "help": (
-      "Auto-detect the docker compose file in the project root, fetch the latest "
-      "released version of its PACKAGE_NAME from SFTPyPI, and update PACKAGE_VERSION in place."
+      "Auto-detect the docker compose file in the project root, resolve the version to pin "
+      "(--version or latest stable from SFTPyPI), and update PACKAGE_VERSION in place."
     ),
-    "cmd": f'bash "{_script_path("docker-pin-latest.sh")}"',
+    "cmd": f'bash "{_script_path("docker-pin-latest.sh")}" "${{version}}"',
+    "args": [
+      {
+        "name": "version",
+        "options": ["--version", "-V"],
+        "default": "",
+        "help": (
+          "Pin to this exact version (supports pre-release versions such as 1.2.0a1). "
+          "If omitted, the latest stable release is fetched from SFTPyPI."
+        ),
+      },
+    ],
   },
 )
 
@@ -76,9 +87,34 @@ tasks.add(
       "(--bump <type>[,<type>...], optional --notes, --force)."
     ),
     "envfile": ".env",
-    "sequence": [
-      "release $POE_EXTRA_ARGS",
-      "docker-pin-latest",
+    "cmd": (
+      f'bash "{_script_path("release.sh")}" ${{bump}} "${{notes}}" && '
+      f'bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
+    ),
+    "args": [
+      {
+        "name": "bump",
+        "options": ["--bump", "-b"],
+        "required": True,
+        "help": (
+          "Version component(s) to bump. For multiple components use a comma-separated list "
+          "(e.g. --bump minor or --bump major,alpha). "
+          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev."
+        ),
+      },
+      {
+        "name": "notes",
+        "options": ["--notes", "-n"],
+        "default": "",
+        "help": "Optional release notes for the GitHub release (omit to auto-generate from commits)",
+      },
+      {
+        "name": "force",
+        "options": ["--force", "-f"],
+        "type": "boolean",
+        "default": False,
+        "help": "Skip the uncommitted changes check and proceed without prompting",
+      },
     ],
   },
 )

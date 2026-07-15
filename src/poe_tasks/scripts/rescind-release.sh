@@ -2,9 +2,9 @@
 # rescind-release.sh — Remove a release from SFTPyPI, GitHub, and all Git refs.
 # Usage: bash scripts/rescind-release.sh [version]
 #   version   Optional version to rescind (e.g. "1.2.3" or "v1.2.3").
-#             Defaults to the most recent release. When defaulting, the local
-#             branch is also rewound to the previous release tag commit, with
-#             all changes from the release kept in the working tree.
+#             Defaults to the most recent release. When defaulting, the version-bump
+#             and docker-pin-latest commits are rewound, with their changes kept in the
+#             working tree. Any other commits on the branch are left untouched.
 #
 # Required env vars (loaded from .env by the poe task):
 #   UV_INDEX_SFTPYPI_USERNAME
@@ -57,15 +57,6 @@ echo ""
 # Use ^{} to dereference annotated tag objects to the underlying commit SHA.
 # Use ^{} to dereference annotated tags to their underlying commit SHA.
 TAGGED_COMMIT=$(git rev-parse "${TAG}^{}")
-PREV_TAG=""
-PREV_COMMIT=""
-if $IS_MOST_RECENT; then
-    # Tags in descending-version order: [0]=current, [1]=previous
-    PREV_TAG=$(git tag --list 'v*' --sort=-version:refname | sed -n '2p')
-    if [ -n "$PREV_TAG" ]; then
-        PREV_COMMIT=$(git rev-parse "${PREV_TAG}^{}")
-    fi
-fi
 
 # ── 1. GitHub release ─────────────────────────────────────────────────────────
 echo "  [1/3] GitHub release..."
@@ -108,26 +99,23 @@ fi
 # ── 4. Rewind commits (most-recent only) ──────────────────────────────────────
 if $IS_MOST_RECENT; then
     echo ""
-    if [ -z "$PREV_COMMIT" ]; then
-        echo "  No previous release tag found — skipping commit rewind."
+    # Parent of the version-bump commit — the safe rewind target regardless of
+    # how many regular work commits exist between the previous tag and this release.
+    BUMP_PARENT=$(git rev-parse "${TAGGED_COMMIT}^" 2>/dev/null || true)
+    if [ -z "$BUMP_PARENT" ]; then
+        echo "  Tagged commit has no parent — skipping commit rewind."
     else
-        # Count commits that landed after the tagged release commit
         COMMITS_AFTER=$(git rev-list "${TAGGED_COMMIT}..HEAD" --count 2>/dev/null || echo "0")
+        echo "  Rewinding to pre-release state (changes kept in working tree)..."
         if [ "$COMMITS_AFTER" -gt 0 ]; then
-            TAGGED_SHORT=$(git rev-parse --short "$TAGGED_COMMIT")
-            echo "  NOTE: $COMMITS_AFTER commit(s) exist after '$TAG' on this branch."
-            echo "  Skipping automatic rewind to avoid clobbering post-release work."
-            echo "  To manually remove only the release commits, run:"
-            echo "    git rebase --onto ${PREV_TAG} ${TAGGED_SHORT}"
+            echo "  NOTE: $COMMITS_AFTER post-release commit(s) also unstaged to working tree."
+        fi
+        git reset --mixed "${BUMP_PARENT}"
+        echo "  Force-pushing rewound branch to remote..."
+        if git push --force origin "${CURRENT_BRANCH}"; then
+            echo "  Remote branch updated."
         else
-            echo "  Rewinding all commits since '${PREV_TAG}' (changes kept in working tree)..."
-            git reset --mixed "${PREV_COMMIT}"
-            echo "  Force-pushing rewound branch to remote..."
-            if git push --force origin "${CURRENT_BRANCH}"; then
-                echo "  Remote branch updated."
-            else
-                echo "  WARNING: Force-push failed. Run manually: git push --force origin ${CURRENT_BRANCH}"
-            fi
+            echo "  WARNING: Force-push failed. Run manually: git push --force origin ${CURRENT_BRANCH}"
         fi
     fi
 fi
