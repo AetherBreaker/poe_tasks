@@ -82,10 +82,10 @@ tasks.add(
       "poe release-and-pin minor 'first minor release'"
     ),
     "envfile": ".env",
-    "cmd": (
-      f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS &&'
-      f' bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
+    "shell": (
+      f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS && bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
     ),
+    "interpreter": "bash",
   },
 )
 
