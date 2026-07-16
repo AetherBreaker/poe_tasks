@@ -232,7 +232,7 @@ for artifact in dist/*.whl dist/*.tar.gz; do
   cp "${artifact}" "${DIST_SNAPSHOT_DIR}/"
 done
 
-if [[ -n "${bump_types_str}" ]]; then
+if (( ${#BUMP_TYPES[@]} > 0 )); then
   # ---------------------------------------------------------------------------
   # Bump mode: bump version, commit, tag, and push
   # ---------------------------------------------------------------------------

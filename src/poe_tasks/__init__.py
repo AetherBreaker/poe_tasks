@@ -23,6 +23,7 @@ tasks.add(
       "To include release notes, append a multi-word string as the final arg "
       "(single-word trailing args are treated as a typo and raise an error). "
       "Omit all bump types to publish the current version without bumping. "
+      "Pass --force / -f to skip the uncommitted-changes prompt. "
       "Examples: "
       "poe release patch | "
       "poe release major alpha | "
@@ -31,15 +32,6 @@ tasks.add(
     ),
     "envfile": ".env",
     "cmd": f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS',
-    "args": [
-      {
-        "name": "force",
-        "options": ["--force", "-f"],
-        "type": "boolean",
-        "default": False,
-        "help": "Skip the uncommitted changes check and proceed without prompting",
-      },
-    ],
   },
 )
 
@@ -83,6 +75,7 @@ tasks.add(
       "valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
       "To include release notes, append a multi-word string as the final arg "
       "(single-word trailing args are treated as a typo and raise an error). "
+      "Pass --force / -f to skip the uncommitted-changes prompt. "
       "Examples: "
       "poe release-and-pin patch | "
       "poe release-and-pin major alpha | "
@@ -90,18 +83,9 @@ tasks.add(
     ),
     "envfile": ".env",
     "cmd": (
-      f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS && '
-      f'bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
+      f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS &&'
+      f' bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
     ),
-    "args": [
-      {
-        "name": "force",
-        "options": ["--force", "-f"],
-        "type": "boolean",
-        "default": False,
-        "help": "Skip the uncommitted changes check and proceed without prompting",
-      },
-    ],
   },
 )
 
