@@ -16,7 +16,9 @@ set -euo pipefail
 VERSION_ARG="${1:-}"
 
 # ---------------------------------------------------------------------------
-# Auto-detect docker compose file in the project root (cwd)
+# Auto-detect docker compose file (cwd first, then subdirectories)
+# Priority matches Docker Compose's own file-name precedence:
+#   compose.yaml > compose.yml > docker-compose.yaml > docker-compose.yml
 # ---------------------------------------------------------------------------
 COMPOSE_FILE=""
 for candidate in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
@@ -24,10 +26,15 @@ for candidate in compose.yaml compose.yml docker-compose.yaml docker-compose.yml
     COMPOSE_FILE="${candidate}"
     break
   fi
+  found=$(find . -name "${candidate}" -not -path './.git/*' | sort | head -1)
+  if [ -n "${found}" ]; then
+    COMPOSE_FILE="${found}"
+    break
+  fi
 done
 
 if [ -z "${COMPOSE_FILE}" ]; then
-  echo "ERROR: No docker compose file found in $(pwd)." >&2
+  echo "ERROR: No docker compose file found under $(pwd)." >&2
   echo "       Expected one of: compose.yaml, compose.yml, docker-compose.yaml, docker-compose.yml" >&2
   exit 1
 fi
