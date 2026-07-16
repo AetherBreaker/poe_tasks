@@ -16,27 +16,22 @@ tasks = TaskCollection()
 tasks.add(
   task_name="release",
   task_config={
-    "help": "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI. If --bump is omitted, publishes the current version without bumping.",
+    "help": (
+      "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI. "
+      "Pass one or more bump types as free positional args; "
+      "valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
+      "To include release notes, append a multi-word string as the final arg "
+      "(single-word trailing args are treated as a typo and raise an error). "
+      "Omit all bump types to publish the current version without bumping. "
+      "Examples: "
+      "poe release patch | "
+      "poe release major alpha | "
+      "poe release minor 'first minor release' | "
+      "poe release 'publish notes'"
+    ),
     "envfile": ".env",
-    "cmd": f'bash "{_script_path("release.sh")}" ${{bump}} "${{notes}}"',
+    "cmd": f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS',
     "args": [
-      {
-        "name": "bump",
-        "options": ["--bump", "-b"],
-        "default": "",
-        "help": (
-          "Version component(s) to bump. For multiple components use a comma-separated list "
-          "(e.g. --bump minor or --bump major,alpha). "
-          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
-          "If omitted, publishes the current version without bumping."
-        ),
-      },
-      {
-        "name": "notes",
-        "options": ["--notes", "-n"],
-        "default": "",
-        "help": "Optional release notes for the GitHub release (omit to auto-generate from commits)",
-      },
       {
         "name": "force",
         "options": ["--force", "-f"],
@@ -84,31 +79,21 @@ tasks.add(
     "help": (
       "Bump version, commit, tag, build, and publish to GitHub and SFTPyPI, "
       "then pin the docker-compose package version. "
-      "Accepts the same arguments as the release task "
-      "(--bump <type>[,<type>...], optional --notes, --force)."
+      "Pass one or more bump types as free positional args; "
+      "valid values: major, minor, patch, stable, alpha, beta, rc, post, dev. "
+      "To include release notes, append a multi-word string as the final arg "
+      "(single-word trailing args are treated as a typo and raise an error). "
+      "Examples: "
+      "poe release-and-pin patch | "
+      "poe release-and-pin major alpha | "
+      "poe release-and-pin minor 'first minor release'"
     ),
     "envfile": ".env",
     "cmd": (
-      f'bash "{_script_path("release.sh")}" ${{bump}} "${{notes}}" && '
+      f'bash "{_script_path("release.sh")}" $POE_EXTRA_ARGS && '
       f'bash "{_script_path("docker-pin-latest.sh")}" "$(uv version --short)"'
     ),
     "args": [
-      {
-        "name": "bump",
-        "options": ["--bump", "-b"],
-        "required": True,
-        "help": (
-          "Version component(s) to bump. For multiple components use a comma-separated list "
-          "(e.g. --bump minor or --bump major,alpha). "
-          "Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev."
-        ),
-      },
-      {
-        "name": "notes",
-        "options": ["--notes", "-n"],
-        "default": "",
-        "help": "Optional release notes for the GitHub release (omit to auto-generate from commits)",
-      },
       {
         "name": "force",
         "options": ["--force", "-f"],

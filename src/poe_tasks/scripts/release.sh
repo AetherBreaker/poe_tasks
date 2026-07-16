@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # release.sh — Bump version, commit, tag, build, and publish to GitHub and SFTPyPI.
-# Usage: bash scripts/release.sh [--force] [bump_types] [notes]
-#   $1 : comma-separated bump types (e.g. "minor" or "major,alpha"); omit to publish current version
-#   $2 : optional release notes
-# Typically invoked via: poe release [--force] [--bump <type>[,<type>...]] [--notes <notes>]
+# Usage: bash scripts/release.sh [--force|-f] [bump_type ...] ["quoted notes"]
+#   Positional args: one or more bump types (major, minor, patch, stable, alpha, beta, rc, post, dev)
+#   Notes (optional): a quoted multi-word string as the last positional arg
+# Typically invoked via: poe release [-f] [bump_type ...] ["notes"]
 # Examples:
-#   poe release --bump patch
-#   poe release --bump major,alpha
-#   poe release --bump minor --notes "initial minor release"
+#   poe release patch
+#   poe release major alpha
+#   poe release minor "initial minor release"
 #   poe release                         # publish current version without bumping
 #
 # On any error, all steps that were completed are rolled back:
@@ -34,47 +34,52 @@ is_bump_type() {
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-# poe injects --force/-f as env var 'force=True' (type=boolean) and joins
-# repeated --bump values with a space into $1. Notes (optional positional) is $2.
+# poe injects --force/-f as env var 'force=True' (type=boolean); all other
+# positional args arrive as $@ (via $POE_EXTRA_ARGS expansion in the poe cmd).
 # We also handle --force/-f flags if the script is invoked directly.
+#
+# Detection rules (applied to remaining args after stripping --force/-f):
+#   - Leading args matching a bump type    → collected into BUMP_TYPES
+#   - Once a non-bump-type word is seen, all remaining args form the notes candidate
+#   - 0 trailing non-bump-type words       → no notes
+#   - 1 trailing non-bump-type word        → error (assumed typo, not a note)
+#   - 2+ trailing non-bump-type words      → joined with spaces as release notes
 _force_env="${force:-}"
 force=false
-args=()
+BUMP_TYPES=()
+_tail_words=()
+
 for arg in "$@"; do
   case "${arg}" in
   --force | -f) force=true ;;
-  *) args+=("${arg}") ;;
+  *)
+    if is_bump_type "${arg}" && (( ${#_tail_words[@]} == 0 )); then
+      BUMP_TYPES+=("${arg}")
+    else
+      _tail_words+=("${arg}")
+    fi
+    ;;
   esac
 done
 [[ "${_force_env}" == "True" ]] && force=true
 unset _force_env
 
-# $1 (args[0]) = comma-separated bump types string (e.g. "major,alpha" or just "minor"); empty = no-bump mode
-# $2 (args[1]) = optional notes
-bump_types_str="${args[0]:-}"
-notes_text="${args[1]:-}"
-
-# Split the comma-separated bump types string into an array (empty when --bump is omitted)
-BUMP_TYPES=()
-if [[ -n "${bump_types_str}" ]]; then
-  IFS=',' read -ra BUMP_TYPES <<<"${bump_types_str}"
-
-  if ((${#BUMP_TYPES[@]} == 0)); then
-    echo "ERROR: At least one --bump type is required." >&2
-    echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+notes_text=""
+if (( ${#_tail_words[@]} == 1 )); then
+  if [[ "${_tail_words[0]}" == *" "* ]]; then
+    # Single arg with spaces — shell quoting was preserved; treat as notes
+    notes_text="${_tail_words[0]}"
+  else
+    # Single word that isn't a bump type — assume typo
+    echo "ERROR: '${_tail_words[0]}' is not a valid bump type." >&2
+    echo "       Valid bump types: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
+    echo "       (Notes must be multiple words — single-word notes are not supported.)" >&2
     exit 1
   fi
-
-  # Validate each bump type
-  for _bt in "${BUMP_TYPES[@]}"; do
-    if ! is_bump_type "${_bt}"; then
-      echo "ERROR: Invalid bump type '${_bt}'." >&2
-      echo "       Valid values: major, minor, patch, stable, alpha, beta, rc, post, dev" >&2
-      exit 1
-    fi
-  done
-  unset _bt
+elif (( ${#_tail_words[@]} >= 2 )); then
+  notes_text="${_tail_words[*]}"
 fi
+unset _tail_words
 
 # ---------------------------------------------------------------------------
 # Pre-flight: verify required environment variables are present
