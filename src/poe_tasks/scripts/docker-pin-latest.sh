@@ -90,7 +90,7 @@ if [ -n "${VERSION_ARG}" ]; then
       echo "ERROR: Empty response from SFTPyPI for package '${PACKAGE_NAME}'" >&2
       exit 1
     fi
-    EXISTS=$(printf '%s\n' "${VALIDATE_JSON}" | python3 -c "
+    EXISTS=$(printf '%s\n' "${VALIDATE_JSON}" | uv run python -c "
 import sys, json
 data = json.load(sys.stdin)
 target = sys.argv[1]
@@ -118,7 +118,7 @@ elif [ "${MODE}" = "git" ]; then
     exit 1
   fi
 
-  LATEST_VERSION=$(printf '%s\n' "${TAGS_JSON}" | python3 -c "
+  LATEST_VERSION=$(printf '%s\n' "${TAGS_JSON}" | uv run python -c "
 import sys, re, json
 
 tags = json.load(sys.stdin)
