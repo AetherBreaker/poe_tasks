@@ -53,7 +53,7 @@ for arg in "$@"; do
   case "${arg}" in
   --force | -f) force=true ;;
   *)
-    if is_bump_type "${arg}" && (( ${#_tail_words[@]} == 0 )); then
+    if is_bump_type "${arg}" && ((${#_tail_words[@]} == 0)); then
       BUMP_TYPES+=("${arg}")
     else
       _tail_words+=("${arg}")
@@ -65,7 +65,7 @@ done
 unset _force_env
 
 notes_text=""
-if (( ${#_tail_words[@]} == 1 )); then
+if ((${#_tail_words[@]} == 1)); then
   if [[ "${_tail_words[0]}" == *" "* ]]; then
     # Single arg with spaces — shell quoting was preserved; treat as notes
     notes_text="${_tail_words[0]}"
@@ -76,7 +76,7 @@ if (( ${#_tail_words[@]} == 1 )); then
     echo "       (Notes must be multiple words — single-word notes are not supported.)" >&2
     exit 1
   fi
-elif (( ${#_tail_words[@]} >= 2 )); then
+elif ((${#_tail_words[@]} >= 2)); then
   notes_text="${_tail_words[*]}"
 fi
 unset _tail_words
@@ -105,7 +105,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
     echo "WARNING: Proceeding anyway (--force)." >&2
   else
     printf "Continue with release anyway? [y/N] " >&2
-    read -r _response < /dev/tty
+    read -r _response </dev/tty
     case "${_response}" in
     [yY] | [yY][eE][sS]) echo "Continuing..." ;;
     *)
@@ -232,7 +232,7 @@ for artifact in dist/*.whl dist/*.tar.gz; do
   cp "${artifact}" "${DIST_SNAPSHOT_DIR}/"
 done
 
-if (( ${#BUMP_TYPES[@]} > 0 )); then
+if ((${#BUMP_TYPES[@]} > 0)); then
   # ---------------------------------------------------------------------------
   # Bump mode: bump version, commit, tag, and push
   # ---------------------------------------------------------------------------
