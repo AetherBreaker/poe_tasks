@@ -105,7 +105,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
     echo "WARNING: Proceeding anyway (--force)." >&2
   else
     printf "Continue with release anyway? [y/N] " >&2
-    read -r _response
+    read -r _response < /dev/tty
     case "${_response}" in
     [yY] | [yY][eE][sS]) echo "Continuing..." ;;
     *)
